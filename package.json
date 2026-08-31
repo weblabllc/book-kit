@@ -1,0 +1,48 @@
+{
+  "name": "@risklight/ebook-kit",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Framework-free EPUB/PDF toolkit: manifest parsing, chunked resources, buyer watermarking with cyrillic transliteration",
+  "keywords": [
+    "epub",
+    "pdf",
+    "ebook",
+    "watermark",
+    "reader",
+    "drm",
+    "typescript"
+  ],
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0",
+    "@types/adm-zip": "^0.5.7"
+  }
+}
