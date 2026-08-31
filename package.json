@@ -13,6 +13,14 @@
     "typescript"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RiskLight/ebook-kit.git"
+  },
+  "homepage": "https://github.com/RiskLight/ebook-kit",
+  "bugs": {
+    "url": "https://github.com/RiskLight/ebook-kit/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -25,24 +33,30 @@
   "files": [
     "dist"
   ],
+  "sideEffects": false,
   "engines": {
     "node": ">=22.12"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "prepublishOnly": "npm run build",
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc"
+    "build": "tsc",
+    "lint": "oxlint src/"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.10.0",
+    "oxlint": "^1.80.0",
     "typescript": "^5.8.0",
-    "vitest": "^4.1.0",
-    "@types/adm-zip": "^0.5.7"
+    "vitest": "^4.1.0"
   }
 }
