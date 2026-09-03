@@ -15,11 +15,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RiskLight/ebook-kit.git"
+    "url": "git+https://github.com/RiskLightS/ebook-kit.git"
   },
-  "homepage": "https://github.com/RiskLight/ebook-kit",
+  "homepage": "https://github.com/RiskLightS/ebook-kit",
   "bugs": {
-    "url": "https://github.com/RiskLight/ebook-kit/issues"
+    "url": "https://github.com/RiskLightS/ebook-kit/issues"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
