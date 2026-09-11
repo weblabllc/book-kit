@@ -1,5 +1,5 @@
 import AdmZip from 'adm-zip';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
 
 export interface Watermark {
     name: string;
@@ -90,24 +90,61 @@ export function watermarkEpub(data: Buffer, watermark: Watermark): Buffer {
     return stamped.toBuffer();
 }
 
+export type PdfDocument = PDFDocument;
+
+export function openPdf(data: Buffer): Promise<PdfDocument> {
+    return PDFDocument.load(data);
+}
+
+export function pdfPageCount(doc: PdfDocument): number {
+    return doc.getPageCount();
+}
+
 export async function watermarkPdf(data: Buffer, watermark: Watermark): Promise<Buffer> {
     const doc = await PDFDocument.load(data);
     const font = await doc.embedFont(StandardFonts.Helvetica);
-    const nameAscii = toAscii(watermark.name);
-    const line = `Prydbano: ${[nameAscii, watermark.email].filter(Boolean).join(' - ')}`;
+    const line = stampLine(watermark);
     for (const page of doc.getPages()) {
-        const { width } = page.getSize();
-        const textWidth = font.widthOfTextAtSize(line, 8);
-        page.drawText(line, {
-            x: Math.max(20, (width - textWidth) / 2),
-            y: 14,
-            size: 8,
-            font,
-            color: rgb(0.55, 0.55, 0.55),
-            opacity: 0.6,
-        });
+        stampPage(page, font, line);
     }
     return Buffer.from(await doc.save());
+}
+
+/**
+ * A single page lifted out of an already-parsed document, watermarked and
+ * returned as a standalone PDF. A reader that asks page by page never gets a
+ * response it could save as the whole book, and the source is parsed once
+ * instead of once per page turn.
+ */
+export async function watermarkedPdfPage(
+    doc: PdfDocument,
+    pageIndex: number,
+    watermark: Watermark,
+): Promise<Buffer | null> {
+    if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= doc.getPageCount()) return null;
+    const out = await PDFDocument.create();
+    const [page] = await out.copyPages(doc, [pageIndex]);
+    out.addPage(page);
+    const font = await out.embedFont(StandardFonts.Helvetica);
+    stampPage(page, font, stampLine(watermark));
+    return Buffer.from(await out.save());
+}
+
+function stampLine(watermark: Watermark): string {
+    return `Prydbano: ${[toAscii(watermark.name), watermark.email].filter(Boolean).join(' - ')}`;
+}
+
+function stampPage(page: PDFPage, font: PDFFont, line: string): void {
+    const { width } = page.getSize();
+    const textWidth = font.widthOfTextAtSize(line, 8);
+    page.drawText(line, {
+        x: Math.max(20, (width - textWidth) / 2),
+        y: 14,
+        size: 8,
+        font,
+        color: rgb(0.55, 0.55, 0.55),
+        opacity: 0.6,
+    });
 }
 
 function injectStamp(data: Buffer, watermark: Watermark): Buffer {
