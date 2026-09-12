@@ -12,11 +12,20 @@ export interface EpubManifestItem {
     inSpine: boolean;
 }
 
+export interface EpubTocEntry {
+    label: string;
+    href: string;
+    anchor: string | null;
+    depth: number;
+}
+
 export interface EpubManifest {
     title: string | null;
     basePath: string;
     items: EpubManifestItem[];
     spine: string[];
+    toc: EpubTocEntry[];
+    spineSizes: number[];
 }
 
 export type EpubArchive = AdmZip;
@@ -56,7 +65,108 @@ export function parseEpubManifest(zip: EpubArchive): EpubManifest {
         }
     }
 
-    return { title, basePath, items: [...items.values()], spine };
+    const toc = parseToc(zip, opf, basePath, items);
+    const spineSizes = spine.map(href => {
+        const entry = zip.getEntry(basePath + href) ?? zip.getEntry(href);
+        return entry ? entry.header.size : 0;
+    });
+
+    return { title, basePath, items: [...items.values()], spine, toc, spineSizes };
+}
+
+function decodeEntities(value: string): string {
+    return value
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function splitHref(src: string, tocDir: string, basePath: string): { href: string; anchor: string | null } {
+    const [rawPath, rawAnchor] = decodeURIComponent(src).split('#');
+    const joined = tocDir + rawPath;
+    const href = joined.startsWith(basePath) ? joined.slice(basePath.length) : joined;
+    return { href: href.replace(/^\.\//, ''), anchor: rawAnchor || null };
+}
+
+function parseToc(
+    zip: EpubArchive,
+    opf: string,
+    basePath: string,
+    items: Map<string, EpubManifestItem>,
+): EpubTocEntry[] {
+    const navItem = [...opf.matchAll(/<item\s+[^>]*?\/?>/g)]
+        .map(m => m[0])
+        .find(tag => /properties="[^"]*\bnav\b[^"]*"/.test(tag));
+    if (navItem) {
+        const href = /href="([^"]+)"/.exec(navItem)?.[1];
+        const entry = href ? zip.getEntry(basePath + decodeURIComponent(href)) : null;
+        if (entry) {
+            const parsed = parseNavXhtml(entry.getData().toString('utf8'), dirOf(basePath + decodeURIComponent(href!)), basePath);
+            if (parsed.length) return parsed;
+        }
+    }
+
+    const ncxId = /<spine[^>]*\btoc="([^"]+)"/.exec(opf)?.[1];
+    const ncxItem =
+        (ncxId && items.get(ncxId)) ??
+        [...items.values()].find(i => i.mediaType === 'application/x-dtbncx+xml');
+    if (ncxItem) {
+        const path = basePath + ncxItem.href;
+        const entry = zip.getEntry(path) ?? zip.getEntry(ncxItem.href);
+        if (entry) return parseNcx(entry.getData().toString('utf8'), dirOf(path), basePath);
+    }
+    return [];
+}
+
+function dirOf(path: string): string {
+    return path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+}
+
+function parseNcx(xml: string, tocDir: string, basePath: string): EpubTocEntry[] {
+    const out: EpubTocEntry[] = [];
+    const tokens = xml.match(/<navPoint\b[^>]*>|<\/navPoint>|<text>[\s\S]*?<\/text>|<content\b[^>]*\/?>/g) ?? [];
+    let depth = -1;
+    let pendingLabel: string | null = null;
+    for (const token of tokens) {
+        if (token.startsWith('<navPoint')) {
+            depth += 1;
+            pendingLabel = null;
+        } else if (token === '</navPoint>') {
+            depth -= 1;
+        } else if (token.startsWith('<text>')) {
+            if (pendingLabel === null) pendingLabel = decodeEntities(token.slice(6, -7));
+        } else if (token.startsWith('<content')) {
+            const src = /src="([^"]+)"/.exec(token)?.[1];
+            if (src && pendingLabel !== null) {
+                out.push({ label: pendingLabel, ...splitHref(src, tocDir, basePath), depth: Math.max(depth, 0) });
+                pendingLabel = null;
+            }
+        }
+    }
+    return out;
+}
+
+function parseNavXhtml(html: string, tocDir: string, basePath: string): EpubTocEntry[] {
+    const navMatch = /<nav\b[^>]*epub:type="[^"]*\btoc\b[^"]*"[^>]*>([\s\S]*?)<\/nav>/i.exec(html);
+    if (!navMatch) return [];
+    const out: EpubTocEntry[] = [];
+    const tokens = navMatch[1].match(/<ol\b[^>]*>|<\/ol>|<a\b[^>]*href="[^"]+"[^>]*>[\s\S]*?<\/a>/gi) ?? [];
+    let depth = -1;
+    for (const token of tokens) {
+        if (/^<ol/i.test(token)) depth += 1;
+        else if (/^<\/ol/i.test(token)) depth -= 1;
+        else {
+            const href = /href="([^"]+)"/i.exec(token)?.[1];
+            const label = decodeEntities(token.replace(/<[^>]+>/g, ''));
+            if (href && label) out.push({ label, ...splitHref(href, tocDir, basePath), depth: Math.max(depth, 0) });
+        }
+    }
+    return out;
 }
 
 export function readEpubResource(

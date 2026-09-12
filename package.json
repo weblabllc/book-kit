@@ -1,6 +1,6 @@
 {
   "name": "@risklight/ebook-kit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Framework-free EPUB/PDF toolkit: manifest parsing, chunked resources, buyer watermarking with cyrillic transliteration",
   "keywords": [

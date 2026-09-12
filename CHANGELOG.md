@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 — 2026-09-12
+
+- `parseEpubManifest` now returns `toc` — the book's own table of contents from NCX (EPUB 2) or nav.xhtml (EPUB 3), with labels, target hrefs, anchors and nesting depth. Readers should title chapters from it instead of numbering spine files: a converter-split book has many more files than chapters.
+- `spineSizes` — uncompressed byte size per spine item, so reading progress can be weighed by text volume rather than file count.
+
 ## 0.2.0 — 2026-09-12
 
 Added: single-page PDF extraction, so a reader can ask for one page at a
