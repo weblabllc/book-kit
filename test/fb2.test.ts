@@ -73,7 +73,7 @@ describe('fb2ToEpub', () => {
             ['Частина перша', 0],
             ['Розділ I', 1],
             ['Розділ II', 1],
-            ['Розділ 3', 0],
+            ['Без назви', 0],
             ['Примітки', 0],
         ]);
         const ch1 = readEpubResource(zip, manifest, 'ch002.xhtml')!.data.toString('utf8');

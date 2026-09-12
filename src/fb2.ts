@@ -252,9 +252,13 @@ function renderNode(node: XmlNode, ctx: RenderContext, depth: number): string {
 }
 
 function sectionTitle(section: XmlElement, fallback: string): string {
-    const title = child(section, 'title');
-    const text = normalizeSpace(textOf(title));
-    return text || fallback;
+    const text = normalizeSpace(textOf(child(section, 'title')));
+    if (text) return text;
+    const firstParagraph = normalizeSpace(textOf(child(section, 'p') ?? child(child(section, 'epigraph'), 'p')));
+    if (fallback && firstParagraph) {
+        return firstParagraph.length > 48 ? `${firstParagraph.slice(0, 45).trimEnd()}…` : firstParagraph;
+    }
+    return fallback;
 }
 
 const CHAPTER_CSS = `body { font-family: serif; line-height: 1.5; margin: 0 5%; }
