@@ -1,6 +1,8 @@
 import AdmZip from 'adm-zip';
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
 
+import { buildEpubZip, ZipEntryInput } from './zip-writer.js';
+
 export interface Watermark {
     name: string;
     email: string;
@@ -41,7 +43,8 @@ export function parseEpubManifest(zip: EpubArchive): EpubManifest {
     const basePath = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
     const opf = zip.readAsText(opfPath);
 
-    const title = /<dc:title[^>]*>([^<]*)<\/dc:title>/.exec(opf)?.[1] ?? null;
+    const rawTitle = /<dc:title[^>]*>([^<]*)<\/dc:title>/.exec(opf)?.[1];
+    const title = rawTitle ? decodeEntities(rawTitle) : null;
 
     const items = new Map<string, EpubManifestItem>();
     const itemRe = /<item\s+[^>]*?\/?>/g;
@@ -188,16 +191,16 @@ export function readEpubResource(
 
 export function watermarkEpub(data: Buffer, watermark: Watermark): Buffer {
     const original = new AdmZip(data);
-    const stamped = new AdmZip();
+    const entries: ZipEntryInput[] = [];
     for (const entry of original.getEntries()) {
         if (entry.isDirectory) continue;
         let entryData = entry.getData();
         if (/\.x?html?$/i.test(entry.entryName)) {
             entryData = injectStamp(entryData, watermark);
         }
-        stamped.addFile(entry.entryName, entryData);
+        entries.push({ name: entry.entryName, data: entryData });
     }
-    return stamped.toBuffer();
+    return buildEpubZip(entries);
 }
 
 export type PdfDocument = PDFDocument;
@@ -299,3 +302,17 @@ function escapeHtml(value: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
+
+export {
+    decodeFb2,
+    fb2ToEpub,
+    parseFb2,
+    parseXml,
+    watermarkFb2,
+    type Fb2Binary,
+    type Fb2Book,
+    type Fb2ToEpubResult,
+    type XmlElement,
+    type XmlNode,
+} from './fb2.js';
+export { buildEpubZip, buildZip, type ZipEntryInput } from './zip-writer.js';
