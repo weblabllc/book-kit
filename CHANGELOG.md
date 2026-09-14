@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+- EPUB: attribute values in single quotes, `../` and `./` in toc/nav hrefs normalised against the spine, hex entities in titles, tolerant `decodeURIComponent`, case-insensitive `</body>` for the stamp
+- PDF: stamp positioned from the crop box, follows page rotation; e-mail transliterated too, diacritics folded (Zoë → Zoe)
+- FB2: recursive nav (well-formed at any depth), collision-free image names, `footnotes` body treated as notes, body without sections kept, wrapper section ids preserved, stamp placed after title/epigraph/annotation, CDATA and comments ignored
+- zip-writer: explicit error instead of a corrupt archive beyond ZIP32 limits
+- `@types/adm-zip` moved to dependencies (public `EpubArchive` type)
+
+## 0.4.0
+- FB2: `parseFb2`, `fb2ToEpub`, `watermarkFb2`; own spec-ordered zip writer (`mimetype` first, stored)
+
 ## 0.3.0 — 2026-09-12
 
 - `parseEpubManifest` now returns `toc` — the book's own table of contents from NCX (EPUB 2) or nav.xhtml (EPUB 3), with labels, target hrefs, anchors and nesting depth. Readers should title chapters from it instead of numbering spine files: a converter-split book has many more files than chapters.

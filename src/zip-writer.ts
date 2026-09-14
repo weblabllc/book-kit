@@ -14,7 +14,13 @@ function dosDateTime(date: Date): { time: number; date: number } {
     };
 }
 
+const ZIP32_LIMIT = 0xffffffff;
+
 export function buildZip(entries: ZipEntryInput[], now = new Date()): Buffer {
+    if (entries.length > 0xffff) throw new Error('zip: more than 65535 entries needs ZIP64, which is not supported');
+    for (const entry of entries) {
+        if (entry.data.length > ZIP32_LIMIT) throw new Error(`zip: entry ${entry.name} exceeds 4 GiB, ZIP64 is not supported`);
+    }
     const { time, date } = dosDateTime(now);
     const locals: Buffer[] = [];
     const centrals: Buffer[] = [];
@@ -64,6 +70,7 @@ export function buildZip(entries: ZipEntryInput[], now = new Date()): Buffer {
         offset += local.length + payload.length;
     }
     const centralSize = centrals.reduce((n, b) => n + b.length, 0);
+    if (offset + centralSize > ZIP32_LIMIT) throw new Error('zip: archive exceeds 4 GiB, ZIP64 is not supported');
     const end = Buffer.alloc(22);
     end.writeUInt32LE(0x06054b50, 0);
     end.writeUInt16LE(0, 4);

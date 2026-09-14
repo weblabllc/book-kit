@@ -1,6 +1,6 @@
 {
   "name": "@risklight/ebook-kit",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "Framework-free EPUB/PDF/FB2 toolkit: manifest parsing, chunked resources, FB2 to EPUB, buyer watermarking with cyrillic transliteration",
   "keywords": [
@@ -51,10 +51,10 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "@types/adm-zip": "^0.5.7"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.10.0",
     "oxlint": "^1.80.0",
     "typescript": "^5.8.0",

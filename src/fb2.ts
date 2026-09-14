@@ -126,6 +126,16 @@ export function decodeFb2(data: Buffer): string {
     }
 }
 
+const NOTES_BODY = /^(notes|comments|footnotes)$/i;
+
+function wrapLooseBody(body: XmlElement): XmlElement {
+    if (children(body, 'section').length) return body;
+    const loose = body.children.filter(c => typeof c === 'string' || !['title', 'epigraph', 'image'].includes(c.tag));
+    if (!loose.some(c => typeof c !== 'string' || c.trim())) return body;
+    const kept = body.children.filter(c => !loose.includes(c));
+    return { ...body, children: [...kept, { tag: 'section', attrs: {}, children: loose }] };
+}
+
 export function parseFb2(data: Buffer): Fb2Book {
     const root = parseXml(decodeFb2(data));
     const book = child(root, 'FictionBook');
@@ -155,8 +165,8 @@ export function parseFb2(data: Buffer): Fb2Book {
         lang: normalizeSpace(textOf(child(titleInfo, 'lang'))) || 'uk',
         annotation: child(titleInfo, 'annotation'),
         coverId,
-        bodies: bodies.filter(b => b.attrs.name !== 'notes' && b.attrs.name !== 'comments'),
-        notes: bodies.filter(b => b.attrs.name === 'notes' || b.attrs.name === 'comments'),
+        bodies: bodies.filter(b => !NOTES_BODY.test(b.attrs.name ?? '')).map(wrapLooseBody),
+        notes: bodies.filter(b => NOTES_BODY.test(b.attrs.name ?? '')),
         binaries: binaries.filter(b => b.id),
     };
 }
@@ -251,6 +261,11 @@ function renderNode(node: XmlNode, ctx: RenderContext, depth: number): string {
     }
 }
 
+function extensionFor(contentType: string): string {
+    const map: Record<string, string> = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/webp': 'webp' };
+    return map[contentType.toLowerCase()] ?? '';
+}
+
 function sectionTitle(section: XmlElement, fallback: string): string {
     const text = normalizeSpace(textOf(child(section, 'title')));
     if (text) return text;
@@ -302,16 +317,16 @@ export function fb2ToEpub(data: Buffer): Fb2ToEpubResult {
     const spine: string[] = [];
     const nav: Array<{ label: string; href: string; depth: number }> = [];
 
-    for (const bin of book.binaries) {
-        const safe = bin.id.replace(/[^\w.-]/g, '_');
-        const path = `images/${safe}`;
+    book.binaries.forEach((bin, index) => {
+        const ext = bin.id.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() ?? extensionFor(bin.contentType);
+        const path = `images/img-${index + 1}${ext ? `.${ext}` : ''}`;
         images.set(bin.id, path);
         zip.addFile(`OEBPS/${path}`, bin.data);
         const isCover = bin.id === book.coverId;
         manifest.push(
             `<item id="img-${manifest.length}" href="${escapeXml(path)}" media-type="${escapeXml(bin.contentType)}"${isCover ? ' properties="cover-image"' : ''}/>`,
         );
-    }
+    });
 
     const anchorFile = new Map<string, string>();
     const notesFile = 'notes.xhtml';
@@ -357,7 +372,7 @@ export function fb2ToEpub(data: Buffer): Fb2ToEpubResult {
         const id = `ch${i + 1}`;
         const html = unit.leaf
             ? renderNode(unit.section, ctx, 0)
-            : `<section>\n${unit.section.children
+            : `<section${unit.section.attrs.id ? ` id="${escapeXml(unit.section.attrs.id)}"` : ''}>\n${unit.section.children
                   .filter(c => typeof c === 'string' || c.tag !== 'section')
                   .map(c => renderNode(c, ctx, 1))
                   .join('')}</section>\n`;
@@ -379,24 +394,23 @@ export function fb2ToEpub(data: Buffer): Fb2ToEpubResult {
         nav.push({ label: 'Примітки', href: notesFile, depth: 0 });
     }
 
-    const navList: string[] = [];
-    let depth = -1;
+    interface NavNode { label: string; href: string; children: NavNode[] }
+    const navRoot: NavNode[] = [];
+    const navStack: NavNode[][] = [navRoot];
     for (const entry of nav) {
-        while (depth < entry.depth) {
-            navList.push(depth < 0 ? '<ol>' : '<ol>');
-            depth += 1;
-        }
-        while (depth > entry.depth) {
-            navList.push('</li></ol>');
-            depth -= 1;
-        }
-        if (navList.length && !navList[navList.length - 1].endsWith('<ol>')) navList.push('</li>');
-        navList.push(`<li><a href="${escapeXml(entry.href)}">${escapeXml(entry.label)}</a>`);
+        const level = Math.min(entry.depth, navStack.length - 1);
+        navStack.length = level + 1;
+        const node: NavNode = { label: entry.label, href: entry.href, children: [] };
+        navStack[level].push(node);
+        navStack.push(node.children);
     }
-    while (depth >= 0) {
-        navList.push('</li></ol>');
-        depth -= 1;
-    }
+    const renderNav = (nodes: NavNode[]): string =>
+        nodes.length
+            ? `<ol>\n${nodes
+                  .map(n => `<li><a href="${escapeXml(n.href)}">${escapeXml(n.label)}</a>${n.children.length ? `\n${renderNav(n.children)}` : ''}</li>`)
+                  .join('\n')}\n</ol>`
+            : '';
+    const navList = [renderNav(navRoot)];
     const navXhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head><meta charset="utf-8"/><title>Зміст</title></head>
@@ -464,38 +478,40 @@ ${spine.map(id => `<itemref idref="${id}"/>`).join('\n')}
 export function watermarkFb2(data: Buffer, watermark: Watermark): Buffer {
     const xml = decodeFb2(data);
     const stamp = `<p><emphasis>Придбано: ${escapeXml(watermark.name)} · ${escapeXml(watermark.email)}</emphasis></p>`;
+    const re =
+        /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<body\b[^>]*>|<\/body\s*>|<section\b[^>]*\/>|<section\b[^>]*>|<\/section\s*>|<title\b[^>]*>[\s\S]*?<\/title\s*>|<epigraph\b[^>]*>[\s\S]*?<\/epigraph\s*>|<annotation\b[^>]*>[\s\S]*?<\/annotation\s*>|<image\b[^>]*\/>|<[^>]+>/g;
+    const isHead = (token: string) => /^<(title|epigraph|annotation|image)\b/.test(token);
     let depth = 0;
     let inNotes = false;
+    let pending = false;
     let out = '';
     let last = 0;
-    const re = /<body\b[^>]*>|<\/body>|<section\b[^>]*\/>|<section\b[^>]*>|<\/section>|<title>[\s\S]*?<\/title>/g;
     let m: RegExpExecArray | null;
-    let pendingStamp = false;
     while ((m = re.exec(xml))) {
         const token = m[0];
-        if (pendingStamp && !token.startsWith('<title>')) {
+        const opensSection = token.startsWith('<section') && !token.endsWith('/>');
+        if (pending && !isHead(token) && !opensSection && !token.startsWith('<!')) {
             out += stamp;
-            pendingStamp = false;
+            pending = false;
         }
-        out += xml.slice(last, m.index);
+        out += xml.slice(last, m.index) + token;
         last = m.index + token.length;
-        out += token;
+        if (token.startsWith('<!')) continue;
         if (token.startsWith('<body')) {
-            inNotes = /name="(notes|comments)"/.test(token);
+            inNotes = NOTES_BODY.test(/name\s*=\s*["']([^"']*)["']/.exec(token)?.[1] ?? '');
             depth = 0;
-        } else if (token === '</body>') {
+        } else if (token.startsWith('</body')) {
             inNotes = false;
-        } else if (token.startsWith('<section') && !token.endsWith('/>')) {
+            pending = false;
+        } else if (opensSection) {
             depth += 1;
-            if (depth === 1 && !inNotes) pendingStamp = true;
-        } else if (token === '</section>') {
+            if (depth === 1 && !inNotes) pending = true;
+        } else if (token.startsWith('</section')) {
             depth -= 1;
-        } else if (token.startsWith('<title>') && pendingStamp) {
-            out += stamp;
-            pendingStamp = false;
+            pending = false;
         }
     }
     out += xml.slice(last);
-    out = out.replace(/^(<\?xml[^>]*encoding=)["'][^"']+["']/, '$1"UTF-8"');
+    out = out.replace(/^(\s*<\?xml[^>]*encoding=)["'][^"']+["']/, '$1"UTF-8"');
     return Buffer.from(out, 'utf8');
 }

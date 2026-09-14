@@ -83,7 +83,7 @@ describe('fb2ToEpub', () => {
         expect(ch1).toContain('<p class="empty">');
         const ch2 = readEpubResource(zip, manifest, 'ch003.xhtml')!.data.toString('utf8');
         expect(ch2).toContain('<em>Курсив</em> і <strong>жирно</strong>');
-        expect(ch2).toContain('<img src="images/cover.png"');
+        expect(ch2).toContain('<img src="images/img-1.png"');
         expect(ch2).toContain('<p class="v">Рядок 1</p>');
         const part = readEpubResource(zip, manifest, 'ch001.xhtml')!.data.toString('utf8');
         expect(part).toContain('Епіграф');
@@ -99,9 +99,60 @@ describe('watermarkFb2', () => {
     it('stamps every top-level section of the main body and keeps xml valid', () => {
         const out = watermarkFb2(Buffer.from(sampleFb2()), { name: 'Тест', email: 't@e.ua' }).toString('utf8');
         expect(out.match(/Придбано: Тест · t@e.ua/g)).toHaveLength(2);
-        expect(out).toMatch(/<section id="part1"><title><p>Частина перша<\/p><\/title><p><emphasis>Придбано/);
+        expect(out).toMatch(/<epigraph><p>Епіграф<\/p><text-author>Хтось<\/text-author><\/epigraph>\n<section id="ch1"><title><p>Розділ I<\/p><\/title><p><emphasis>Придбано/);
         expect(out).toMatch(/<section><p><emphasis>Придбано: Тест · t@e.ua<\/emphasis><\/p><p>Без назви/);
         expect(out).not.toMatch(/<section id="n1">(<title>.*?<\/title>)?<p><emphasis>Придбано/);
         expect(() => parseFb2(Buffer.from(out))).not.toThrow();
+    });
+
+    it('ignores CDATA and comments, footnotes bodies and self-closing sections', () => {
+        const xml = `<?xml version="1.0" encoding="utf-8"?><FictionBook><body>
+<section><p><![CDATA[ <section> raw ]]></p><!-- <section> --></section>
+<section/>
+<section><p>Друга</p></section>
+</body><body name="footnotes"><section id="n1"><p>Нотатка</p></section></body></FictionBook>`;
+        const out = watermarkFb2(Buffer.from(xml), { name: 'Тест', email: 't@e.ua' }).toString('utf8');
+        expect(out.match(/Придбано/g)).toHaveLength(2);
+        expect(out).toContain('<section><p><emphasis>Придбано: Тест · t@e.ua</emphasis></p><p><![CDATA[ <section> raw ]]></p>');
+        expect(out).toContain('<section><p><emphasis>Придбано: Тест · t@e.ua</emphasis></p><p>Друга</p>');
+        expect(out).toContain('<section id="n1"><p>Нотатка</p>');
+    });
+});
+
+describe('fb2ToEpub edge cases', () => {
+    it('keeps nav well-formed when untitled wrappers skip a depth level', () => {
+        const xml = `<?xml version="1.0"?><FictionBook><description><title-info><book-title>T</book-title></title-info></description>
+<body><section><section><section><title><p>A</p></title><p>x</p></section></section></section>
+<section><title><p>B</p></title><p>y</p></section></body></FictionBook>`;
+        const { epub } = fb2ToEpub(Buffer.from(xml));
+        const nav = openEpub(epub).readAsText('OEBPS/nav.xhtml');
+        const opens = (nav.match(/<ol>/g) ?? []).length;
+        const closes = (nav.match(/<\/ol>/g) ?? []).length;
+        expect(opens).toBe(closes);
+        expect(nav).not.toMatch(/<ol>\s*<ol>/);
+        expect(nav).toContain('>A<');
+        expect(nav).toContain('>B<');
+    });
+
+    it('wraps a body without sections and treats footnotes as notes', () => {
+        const xml = `<?xml version="1.0"?><FictionBook><description><title-info><book-title>T</book-title></title-info></description>
+<body><title><p>Назва</p></title><p>Просто текст</p></body>
+<body name="footnotes"><section id="n1"><p>Нотатка</p></section></body></FictionBook>`;
+        const { epub, chapters } = fb2ToEpub(Buffer.from(xml));
+        expect(chapters).toBe(1);
+        const zip = openEpub(epub);
+        expect(zip.readAsText('OEBPS/ch001.xhtml')).toContain('Просто текст');
+        expect(zip.readAsText('OEBPS/notes.xhtml')).toContain('Нотатка');
+    });
+
+    it('keeps wrapper section ids and gives binaries collision-free names', () => {
+        const xml = `<?xml version="1.0"?><FictionBook xmlns:l="http://www.w3.org/1999/xlink"><description><title-info><book-title>T</book-title></title-info></description>
+<body><section id="part1"><title><p>Частина</p></title><section><p>a <a l:href="#part1">назад</a></p><image l:href="#мапа.png"/><image l:href="#фото.png"/></section></section></body>
+<binary id="мапа.png" content-type="image/png">AA==</binary><binary id="фото.png" content-type="image/png">AQ==</binary></FictionBook>`;
+        const zip = openEpub(fb2ToEpub(Buffer.from(xml)).epub);
+        expect(zip.readAsText('OEBPS/ch001.xhtml')).toContain('<section id="part1">');
+        expect(zip.readAsText('OEBPS/ch002.xhtml')).toContain('href="ch001.xhtml#part1"');
+        expect(zip.getEntry('OEBPS/images/img-1.png')).toBeTruthy();
+        expect(zip.getEntry('OEBPS/images/img-2.png')).toBeTruthy();
     });
 });

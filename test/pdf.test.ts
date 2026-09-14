@@ -59,3 +59,20 @@ describe('single page extraction', () => {
         }
     });
 });
+
+describe('stamp geometry', () => {
+    it('keeps the stamp inside a shifted crop box and survives rotation and non-ascii email', async () => {
+        const doc = await PDFDocument.create();
+        const page = doc.addPage([700, 900]);
+        page.setMediaBox(100, 100, 600, 800);
+        page.setCropBox(150, 150, 500, 700);
+        page.setRotation({ type: 'degrees', angle: 90 } as any);
+        const out = await watermarkPdf(Buffer.from(await doc.save()), { name: 'Zoë Müller', email: 'іван@пошта.укр' });
+        const stamped = await PDFDocument.load(out);
+        const p = stamped.getPage(0);
+        expect(p.getRotation().angle).toBe(90);
+        expect(stamped.getPageCount()).toBe(1);
+        expect(toAscii('Zoë Müller')).toBe('Zoe Muller');
+        expect(toAscii('іван@пошта.укр')).toBe('ivan@poshta.ukr');
+    });
+});
