@@ -29,21 +29,28 @@ describe('epub toolkit', () => {
         expect(manifest.basePath).toBe('OEBPS/');
     });
 
-    it('serves chunked resources with screen watermark for xhtml only', () => {
+    it('serves chunked resources with a readable screen watermark at chapter start and end', () => {
         const zip = openEpub(buildEpub());
         const manifest = parseEpubManifest(zip);
         const wm = { name: 'Богдан', email: 'b@test.local' };
         const chapter = readEpubResource(zip, manifest, 'ch1.xhtml', wm)!;
-        expect(chapter.data.toString('utf8')).toContain('Придбано: Богдан · b@test.local');
+        const html = chapter.data.toString('utf8');
+        const occurrences = html.split('Придбано: Богдан · b@test.local').length - 1;
+        expect(occurrences).toBe(2);
+        expect(html).toContain('opacity:0.6');
+        expect(html.indexOf('Придбано:')).toBeLessThan(html.indexOf('<p>Привіт</p>'));
         const css = readEpubResource(zip, manifest, 'style.css', wm)!;
         expect(css.data.toString('utf8')).toBe('p{margin:0}');
         expect(readEpubResource(zip, manifest, '../secret', wm)).toBeNull();
     });
 
-    it('repacks a fully watermarked epub', () => {
+    it('repacks a fully watermarked epub with the unchanged download stamp (end only, lower opacity)', () => {
         const stamped = watermarkEpub(buildEpub(), { name: 'Ivan', email: 'i@test.local' });
         const out = new AdmZip(stamped);
-        expect(out.readAsText('OEBPS/ch1.xhtml')).toContain('Придбано: Ivan');
+        const html = out.readAsText('OEBPS/ch1.xhtml');
+        expect(html).toContain('Придбано: Ivan');
+        expect(html).toContain('opacity:0.35');
+        expect(html.split('Придбано:').length - 1).toBe(1);
         expect(out.readAsText('OEBPS/style.css')).toBe('p{margin:0}');
     });
 });
@@ -141,5 +148,34 @@ describe('sigil-style layout', () => {
         const m = parseEpubManifest(zip);
         const html = readEpubResource(zip, m, 'Text/Section 0001.xhtml', { name: 'Тест', email: 't@e.ua' })!.data.toString('utf8');
         expect(html).toMatch(/Придбано[\s\S]*<\/BODY>/);
+    });
+});
+
+describe('screen stamp placement', () => {
+    const wm = { name: 'Іван', email: 'i@test.local' };
+    const serve = (chapter: string) => {
+        const zip = new AdmZip();
+        zip.addFile('META-INF/container.xml', Buffer.from('<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'));
+        zip.addFile('content.opf', Buffer.from('<?xml version="1.0"?><package><manifest><item id="c" href="c.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>'));
+        zip.addFile('c.xhtml', Buffer.from(chapter));
+        const epub = openEpub(zip.toBuffer());
+        return readEpubResource(epub, parseEpubManifest(epub), 'c.xhtml', wm)!.data.toString('utf8');
+    };
+
+    it('stamps after an uppercase body tag with attributes and before its closing tag', () => {
+        const html = serve('<?xml version="1.0"?><html><BODY class="x"><p>Текст</p></BODY></html>');
+        expect(html.startsWith('<?xml version="1.0"?><html><BODY class="x"><div')).toBe(true);
+        expect(html.endsWith('</div></BODY></html>')).toBe(true);
+    });
+
+    it('never puts a stamp in front of the xml declaration when there is no body tag', () => {
+        const html = serve('<?xml version="1.0"?><html><p>Текст</p></html>');
+        expect(html.startsWith('<?xml')).toBe(true);
+        expect(html.split('Придбано:').length - 1).toBe(1);
+    });
+
+    it('does not mistake a bodyless tag name for body', () => {
+        const html = serve('<html><bodytext>x</bodytext></html>');
+        expect(html.split('Придбано:').length - 1).toBe(1);
     });
 });

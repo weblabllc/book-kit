@@ -194,6 +194,9 @@ function parseNavXhtml(html: string, tocDir: string, basePath: string): EpubTocE
     return out;
 }
 
+const SCREEN_WATERMARK_OPACITY = 0.6;
+const DOWNLOAD_WATERMARK_OPACITY = 0.35;
+
 export function readEpubResource(
     zip: EpubArchive,
     manifest: EpubManifest,
@@ -206,7 +209,7 @@ export function readEpubResource(
     if (!entry) return null;
     let data = entry.getData();
     if (watermark && /xhtml|html/.test(item.mediaType)) {
-        data = injectStamp(data, watermark);
+        data = injectStamp(data, watermark, SCREEN_WATERMARK_OPACITY, true);
     }
     return { data, mediaType: item.mediaType };
 }
@@ -218,7 +221,7 @@ export function watermarkEpub(data: Buffer, watermark: Watermark): Buffer {
         if (entry.isDirectory) continue;
         let entryData = entry.getData();
         if (/\.x?html?$/i.test(entry.entryName)) {
-            entryData = injectStamp(entryData, watermark);
+            entryData = injectStamp(entryData, watermark, DOWNLOAD_WATERMARK_OPACITY);
         }
         entries.push({ name: entry.entryName, data: entryData });
     }
@@ -280,14 +283,16 @@ function stampPage(page: PDFPage, font: PDFFont, line: string): void {
     }
 }
 
-function injectStamp(data: Buffer, watermark: Watermark): Buffer {
-    const stamp = buildStamp(watermark);
-    const text = data.toString('utf8');
-    const close = /<\/body\s*>/i.exec(text);
-    if (close) return Buffer.from(text.slice(0, close.index) + stamp + text.slice(close.index), 'utf8');
-    const html = /<\/html\s*>/i.exec(text);
-    if (html) return Buffer.from(text.slice(0, html.index) + stamp + text.slice(html.index), 'utf8');
-    return Buffer.from(text + stamp, 'utf8');
+function injectStamp(data: Buffer, watermark: Watermark, opacity = DOWNLOAD_WATERMARK_OPACITY, atStart = false): Buffer {
+    const stamp = buildStamp(watermark, opacity);
+    let text = data.toString('utf8');
+    const close = /<\/body\s*>/i.exec(text) ?? /<\/html\s*>/i.exec(text);
+    text = close ? text.slice(0, close.index) + stamp + text.slice(close.index) : text + stamp;
+    if (atStart) {
+        const open = /<body(?:\s[^>]*)?>/i.exec(text);
+        if (open) text = text.slice(0, open.index + open[0].length) + stamp + text.slice(open.index + open[0].length);
+    }
+    return Buffer.from(text, 'utf8');
 }
 
 const TRANSLIT: Record<string, string> = {
@@ -312,8 +317,8 @@ export function toAscii(value: string): string {
         .trim();
 }
 
-export function buildStamp(watermark: Watermark): string {
-    return `<div style="opacity:0.35;font-size:10px;text-align:center;padding:8px 0">Придбано: ${escapeHtml(
+export function buildStamp(watermark: Watermark, opacity = DOWNLOAD_WATERMARK_OPACITY): string {
+    return `<div style="opacity:${opacity};font-size:10px;text-align:center;padding:8px 0">Придбано: ${escapeHtml(
         watermark.name,
     )} · ${escapeHtml(watermark.email)}</div>`;
 }
