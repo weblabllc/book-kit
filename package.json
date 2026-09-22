@@ -1,6 +1,6 @@
 {
-  "name": "@risklight/ebook-kit",
-  "version": "0.4.0",
+  "name": "@weblabllc/book-kit",
+  "version": "0.5.1",
   "type": "module",
   "description": "Framework-free EPUB/PDF/FB2 toolkit: manifest parsing, chunked resources, FB2 to EPUB, buyer watermarking with cyrillic transliteration",
   "keywords": [
@@ -14,13 +14,14 @@
     "typescript"
   ],
   "license": "MIT",
+  "author": "WebLab LLC <hello@weblab.llc>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RiskLightS/ebook-kit.git"
+    "url": "git+https://github.com/weblabllc/book-kit.git"
   },
-  "homepage": "https://github.com/RiskLightS/ebook-kit",
+  "homepage": "https://github.com/weblabllc/book-kit#readme",
   "bugs": {
-    "url": "https://github.com/RiskLightS/ebook-kit/issues"
+    "url": "https://github.com/weblabllc/book-kit/issues"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -32,7 +33,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
@@ -47,15 +51,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc",
-    "lint": "oxlint src/"
+    "lint": "oxlint src/",
+    "typecheck": "tsc --noEmit",
+    "epubcheck": "node scripts/epubcheck.mjs"
   },
   "dependencies": {
+    "@types/adm-zip": "^0.5.7",
     "adm-zip": "^0.5.16",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "oxlint": "^1.80.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"

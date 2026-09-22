@@ -1,5 +1,6 @@
 import AdmZip from 'adm-zip';
-import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
+import { degrees, PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
+import { posix } from 'node:path';
 
 import { buildEpubZip, ZipEntryInput } from './zip-writer.js';
 
@@ -36,9 +37,28 @@ export function openEpub(data: Buffer): EpubArchive {
     return new AdmZip(data);
 }
 
+const attr = (tag: string, name: string): string | undefined => {
+    const m = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(tag);
+    return m ? (m[1] ?? m[2]) : undefined;
+};
+
+const safeDecode = (value: string): string => {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+};
+
+export const normalizeHref = (value: string): string => {
+    const normalized = posix.normalize(value.replace(/\\/g, '/'));
+    return normalized === '.' ? '' : normalized.replace(/^\.\//, '');
+};
+
 export function parseEpubManifest(zip: EpubArchive): EpubManifest {
     const container = zip.readAsText('META-INF/container.xml');
-    const opfPath = /full-path="([^"]+)"/.exec(container)?.[1];
+    const rootfile = /<rootfile\b[^>]*>/.exec(container)?.[0] ?? '';
+    const opfPath = attr(rootfile, 'full-path');
     if (!opfPath) throw new Error('EPUB: rootfile not found');
     const basePath = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
     const opf = zip.readAsText(opfPath);
@@ -49,18 +69,18 @@ export function parseEpubManifest(zip: EpubArchive): EpubManifest {
     const items = new Map<string, EpubManifestItem>();
     const itemRe = /<item\s+[^>]*?\/?>/g;
     for (const match of opf.match(itemRe) ?? []) {
-        const id = /(?:^|\s)id="([^"]+)"/.exec(match)?.[1];
-        const href = /href="([^"]+)"/.exec(match)?.[1];
-        const mediaType = /media-type="([^"]+)"/.exec(match)?.[1];
+        const id = attr(match, 'id');
+        const href = attr(match, 'href');
+        const mediaType = attr(match, 'media-type');
         if (id && href && mediaType) {
-            items.set(id, { href: decodeURIComponent(href), mediaType, inSpine: false });
+            items.set(id, { href: normalizeHref(safeDecode(href)), mediaType, inSpine: false });
         }
     }
 
     const spine: string[] = [];
     const spineSection = /<spine[\s\S]*?<\/spine>/.exec(opf)?.[0] ?? '';
     for (const match of spineSection.match(/<itemref\s+[^>]*?\/?>/g) ?? []) {
-        const idref = /idref="([^"]+)"/.exec(match)?.[1];
+        const idref = attr(match, 'idref');
         const item = idref ? items.get(idref) : undefined;
         if (item) {
             item.inSpine = true;
@@ -84,16 +104,17 @@ function decodeEntities(value: string): string {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;|&apos;/g, "'")
+        .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
         .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
         .replace(/\s+/g, ' ')
         .trim();
 }
 
 function splitHref(src: string, tocDir: string, basePath: string): { href: string; anchor: string | null } {
-    const [rawPath, rawAnchor] = decodeURIComponent(src).split('#');
-    const joined = tocDir + rawPath;
+    const [rawPath, rawAnchor] = safeDecode(src).split('#');
+    const joined = normalizeHref(tocDir + rawPath);
     const href = joined.startsWith(basePath) ? joined.slice(basePath.length) : joined;
-    return { href: href.replace(/^\.\//, ''), anchor: rawAnchor || null };
+    return { href, anchor: rawAnchor || null };
 }
 
 function parseToc(
@@ -104,17 +125,18 @@ function parseToc(
 ): EpubTocEntry[] {
     const navItem = [...opf.matchAll(/<item\s+[^>]*?\/?>/g)]
         .map(m => m[0])
-        .find(tag => /properties="[^"]*\bnav\b[^"]*"/.test(tag));
+        .find(tag => /\bnav\b/.test(attr(tag, 'properties') ?? ''));
     if (navItem) {
-        const href = /href="([^"]+)"/.exec(navItem)?.[1];
-        const entry = href ? zip.getEntry(basePath + decodeURIComponent(href)) : null;
-        if (entry) {
-            const parsed = parseNavXhtml(entry.getData().toString('utf8'), dirOf(basePath + decodeURIComponent(href!)), basePath);
+        const href = attr(navItem, 'href');
+        const navPath = href ? normalizeHref(basePath + safeDecode(href)) : null;
+        const entry = navPath ? zip.getEntry(navPath) : null;
+        if (entry && navPath) {
+            const parsed = parseNavXhtml(entry.getData().toString('utf8'), dirOf(navPath), basePath);
             if (parsed.length) return parsed;
         }
     }
 
-    const ncxId = /<spine[^>]*\btoc="([^"]+)"/.exec(opf)?.[1];
+    const ncxId = attr(/<spine\b[^>]*>/.exec(opf)?.[0] ?? '', 'toc');
     const ncxItem =
         (ncxId && items.get(ncxId)) ??
         [...items.values()].find(i => i.mediaType === 'application/x-dtbncx+xml');
@@ -144,7 +166,7 @@ function parseNcx(xml: string, tocDir: string, basePath: string): EpubTocEntry[]
         } else if (token.startsWith('<text>')) {
             if (pendingLabel === null) pendingLabel = decodeEntities(token.slice(6, -7));
         } else if (token.startsWith('<content')) {
-            const src = /src="([^"]+)"/.exec(token)?.[1];
+            const src = attr(token, 'src');
             if (src && pendingLabel !== null) {
                 out.push({ label: pendingLabel, ...splitHref(src, tocDir, basePath), depth: Math.max(depth, 0) });
                 pendingLabel = null;
@@ -158,13 +180,13 @@ function parseNavXhtml(html: string, tocDir: string, basePath: string): EpubTocE
     const navMatch = /<nav\b[^>]*epub:type="[^"]*\btoc\b[^"]*"[^>]*>([\s\S]*?)<\/nav>/i.exec(html);
     if (!navMatch) return [];
     const out: EpubTocEntry[] = [];
-    const tokens = navMatch[1].match(/<ol\b[^>]*>|<\/ol>|<a\b[^>]*href="[^"]+"[^>]*>[\s\S]*?<\/a>/gi) ?? [];
+    const tokens = navMatch[1].match(/<ol\b[^>]*>|<\/ol>|<a\b[^>]*href\s*=\s*(?:"[^"]+"|'[^']+')[^>]*>[\s\S]*?<\/a>/gi) ?? [];
     let depth = -1;
     for (const token of tokens) {
         if (/^<ol/i.test(token)) depth += 1;
         else if (/^<\/ol/i.test(token)) depth -= 1;
         else {
-            const href = /href="([^"]+)"/i.exec(token)?.[1];
+            const href = attr(token, 'href');
             const label = decodeEntities(token.replace(/<[^>]+>/g, ''));
             if (href && label) out.push({ label, ...splitHref(href, tocDir, basePath), depth: Math.max(depth, 0) });
         }
@@ -172,9 +194,7 @@ function parseNavXhtml(html: string, tocDir: string, basePath: string): EpubTocE
     return out;
 }
 
-/** Opacity and placement for the on-screen reading view: readable, and seen without scrolling. */
 const SCREEN_WATERMARK_OPACITY = 0.6;
-/** Opacity for the downloaded copy: present, but not intrusive to read. */
 const DOWNLOAD_WATERMARK_OPACITY = 0.35;
 
 export function readEpubResource(
@@ -228,12 +248,6 @@ export async function watermarkPdf(data: Buffer, watermark: Watermark): Promise<
     return Buffer.from(await doc.save());
 }
 
-/**
- * A single page lifted out of an already-parsed document, watermarked and
- * returned as a standalone PDF. A reader that asks page by page never gets a
- * response it could save as the whole book, and the source is parsed once
- * instead of once per page turn.
- */
 export async function watermarkedPdfPage(
     doc: PdfDocument,
     pageIndex: number,
@@ -249,28 +263,34 @@ export async function watermarkedPdfPage(
 }
 
 function stampLine(watermark: Watermark): string {
-    return `Prydbano: ${[toAscii(watermark.name), watermark.email].filter(Boolean).join(' - ')}`;
+    return `Prydbano: ${[toAscii(watermark.name), toAscii(watermark.email)].filter(Boolean).join(' - ')}`;
 }
 
 function stampPage(page: PDFPage, font: PDFFont, line: string): void {
-    const { width } = page.getSize();
-    const textWidth = font.widthOfTextAtSize(line, 8);
-    page.drawText(line, {
-        x: Math.max(20, (width - textWidth) / 2),
-        y: 14,
-        size: 8,
-        font,
-        color: rgb(0.55, 0.55, 0.55),
-        opacity: 0.6,
-    });
+    const box = page.getCropBox();
+    const angle = ((page.getRotation().angle % 360) + 360) % 360;
+    const size = 8;
+    const textWidth = font.widthOfTextAtSize(line, size);
+    const common = { size, font, color: rgb(0.55, 0.55, 0.55), opacity: 0.6 };
+    if (angle === 90) {
+        page.drawText(line, { ...common, x: box.x + box.width - 14, y: box.y + Math.max(20, (box.height - textWidth) / 2), rotate: degrees(90) });
+    } else if (angle === 180) {
+        page.drawText(line, { ...common, x: box.x + Math.min(box.width - 20, (box.width + textWidth) / 2), y: box.y + box.height - 14, rotate: degrees(180) });
+    } else if (angle === 270) {
+        page.drawText(line, { ...common, x: box.x + 14, y: box.y + Math.min(box.height - 20, (box.height + textWidth) / 2), rotate: degrees(270) });
+    } else {
+        page.drawText(line, { ...common, x: box.x + Math.max(20, (box.width - textWidth) / 2), y: box.y + 14 });
+    }
 }
 
 function injectStamp(data: Buffer, watermark: Watermark, opacity = DOWNLOAD_WATERMARK_OPACITY, atStart = false): Buffer {
     const stamp = buildStamp(watermark, opacity);
     let text = data.toString('utf8');
-    text = text.includes('</body>') ? text.replace('</body>', `${stamp}</body>`) : text + stamp;
+    const close = /<\/body\s*>/i.exec(text) ?? /<\/html\s*>/i.exec(text);
+    text = close ? text.slice(0, close.index) + stamp + text.slice(close.index) : text + stamp;
     if (atStart) {
-        text = /<body[^>]*>/i.test(text) ? text.replace(/(<body[^>]*>)/i, `$1${stamp}`) : stamp + text;
+        const open = /<body(?:\s[^>]*)?>/i.exec(text);
+        if (open) text = text.slice(0, open.index + open[0].length) + stamp + text.slice(open.index + open[0].length);
     }
     return Buffer.from(text, 'utf8');
 }
@@ -283,6 +303,8 @@ const TRANSLIT: Record<string, string> = {
 
 export function toAscii(value: string): string {
     return value
+        .normalize('NFKD')
+        .replace(/\p{M}/gu, '')
         .split('')
         .map(ch => {
             if (/[\x20-\x7e]/.test(ch)) return ch;
