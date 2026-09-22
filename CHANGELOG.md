@@ -2,7 +2,7 @@
 
 ## 0.5.0 — 2026-09-22
 
-- Package renamed to `@weblabllc/ebook-kit`.
+- Package renamed to `@weblabllc/book-kit` (npm does not accept the word "ebook" in package names).
 - Real-file tests: an EPUB 3 built by pandoc (nested toc with Cyrillic anchors, repack keeps every entry, `mimetype` first and stored), a FictionBook Editor FB2 in windows-1251 (cover, poem, table, footnotes, epigraph) and a PDF produced by macOS Quartz.
 - `scripts/epubcheck.mjs` validates the watermarked EPUB and the FB2 conversion with W3C EPUBCheck; CI runs it on every push.
 

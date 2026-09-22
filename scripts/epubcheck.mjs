@@ -9,7 +9,7 @@ if (!jar) {
     console.error('usage: node scripts/epubcheck.mjs <path to epubcheck.jar>');
     process.exit(2);
 }
-const dir = mkdtempSync(join(tmpdir(), 'ebook-kit-'));
+const dir = mkdtempSync(join(tmpdir(), 'book-kit-'));
 const fixture = name => readFileSync(new URL(`../test/fixtures/${name}`, import.meta.url));
 const outputs = {
     'pandoc-stamped.epub': watermarkEpub(fixture('pandoc.epub'), { name: 'Іван Тест', email: 'ivan@test.local' }),

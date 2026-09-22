@@ -1,17 +1,17 @@
-# @weblabllc/ebook-kit
+# @weblabllc/book-kit
 
 Framework-free EPUB/PDF toolkit for selling e-books: parse an EPUB into a spine manifest, serve it chapter by chapter (the full file never reaches the browser), watermark every copy with the buyer's identity. Pure functions over `Buffer` — storage (S3, disk) and auth stay in your app.
 
 ## Install
 
 ```bash
-npm install @weblabllc/ebook-kit
+npm install @weblabllc/book-kit
 ```
 
 ## Chunked reader backend
 
 ```ts
-import { openEpub, parseEpubManifest, readEpubResource } from '@weblabllc/ebook-kit'
+import { openEpub, parseEpubManifest, readEpubResource } from '@weblabllc/book-kit'
 
 const zip = openEpub(await storage.get(key))          // cacheable
 const manifest = parseEpubManifest(zip)               // { title, spine, items, basePath }
@@ -25,7 +25,7 @@ Paths outside the manifest return `null` — clients cannot invent them.
 ## Watermarked downloads
 
 ```ts
-import { watermarkEpub, watermarkPdf } from '@weblabllc/ebook-kit'
+import { watermarkEpub, watermarkPdf } from '@weblabllc/book-kit'
 
 const epub = watermarkEpub(original, buyer)   // stamp injected into every chapter
 const pdf  = await watermarkPdf(original, buyer) // one line per page; cyrillic names transliterated
@@ -38,7 +38,7 @@ Known limit: the PDF stamp uses Helvetica, so cyrillic is transliterated (`Prydb
 `fb2ToEpub(buffer)` turns a FictionBook 2 file (plain, zipped, any declared encoding) into an EPUB 3: one XHTML per leaf section, part pages for sections that only wrap other sections, nested `nav` + NCX, notes body as `notes.xhtml` with `epub:type="noteref"` links, cover marked `cover-image`. `watermarkFb2(buffer, watermark)` stamps the buyer into the first paragraph of every top-level section of the main body and returns UTF-8 FB2.
 
 ```ts
-import { fb2ToEpub, watermarkFb2 } from '@weblabllc/ebook-kit'
+import { fb2ToEpub, watermarkFb2 } from '@weblabllc/book-kit'
 
 const { epub, title, chapters } = fb2ToEpub(fb2Buffer)
 const stamped = watermarkFb2(fb2Buffer, { name: 'Іван Тест', email: 'ivan@example.com' })

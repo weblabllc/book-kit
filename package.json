@@ -1,5 +1,5 @@
 {
-  "name": "@weblabllc/ebook-kit",
+  "name": "@weblabllc/book-kit",
   "version": "0.5.0",
   "type": "module",
   "description": "Framework-free EPUB/PDF/FB2 toolkit: manifest parsing, chunked resources, FB2 to EPUB, buyer watermarking with cyrillic transliteration",
@@ -17,11 +17,11 @@
   "author": "WebLab LLC <hello@weblab.llc>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/weblabllc/ebook-kit.git"
+    "url": "git+https://github.com/weblabllc/book-kit.git"
   },
-  "homepage": "https://github.com/weblabllc/ebook-kit#readme",
+  "homepage": "https://github.com/weblabllc/book-kit#readme",
   "bugs": {
-    "url": "https://github.com/weblabllc/ebook-kit/issues"
+    "url": "https://github.com/weblabllc/book-kit/issues"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
