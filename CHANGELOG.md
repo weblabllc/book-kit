@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 — 2026-09-23
+
+- Online reader stamp (`readEpubResource`): shown at the start of every chapter as well as at the end, at opacity 0.6 so it is readable. The start stamp goes right after a real `<body ...>` tag and is skipped when a chapter has none, so it never lands before the XML declaration.
+- Downloaded copies (`watermarkEpub`) keep a single end-of-chapter stamp at opacity 0.35.
+- `buildStamp(watermark, opacity?)` takes an optional opacity.
+
 ## 0.5.1 — 2026-09-22
 
 - README badges: npm version, CI status, license.

@@ -1,6 +1,6 @@
 {
   "name": "@weblabllc/book-kit",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "description": "Framework-free EPUB/PDF/FB2 toolkit: manifest parsing, chunked resources, FB2 to EPUB, buyer watermarking with cyrillic transliteration",
   "keywords": [
