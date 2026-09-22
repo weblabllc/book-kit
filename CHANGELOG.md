@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-09-22
+
+- README badges: npm version, CI status, license.
+- Removed the last doc comment from the source.
+- Published from GitHub Actions via npm trusted publishing with provenance.
+
 ## 0.5.0 — 2026-09-22
 
 - Package renamed to `@weblabllc/book-kit` (npm does not accept the word "ebook" in package names).

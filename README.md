@@ -1,5 +1,7 @@
 # @weblabllc/book-kit
 
+[![npm](https://img.shields.io/npm/v/@weblabllc/book-kit)](https://www.npmjs.com/package/@weblabllc/book-kit) [![ci](https://github.com/weblabllc/book-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/weblabllc/book-kit/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/@weblabllc/book-kit)](LICENSE)
+
 Framework-free EPUB/PDF toolkit for selling e-books: parse an EPUB into a spine manifest, serve it chapter by chapter (the full file never reaches the browser), watermark every copy with the buyer's identity. Pure functions over `Buffer` — storage (S3, disk) and auth stay in your app.
 
 ## Install

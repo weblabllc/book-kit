@@ -245,12 +245,6 @@ export async function watermarkPdf(data: Buffer, watermark: Watermark): Promise<
     return Buffer.from(await doc.save());
 }
 
-/**
- * A single page lifted out of an already-parsed document, watermarked and
- * returned as a standalone PDF. A reader that asks page by page never gets a
- * response it could save as the whole book, and the source is parsed once
- * instead of once per page turn.
- */
 export async function watermarkedPdfPage(
     doc: PdfDocument,
     pageIndex: number,
