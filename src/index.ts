@@ -172,6 +172,11 @@ function parseNavXhtml(html: string, tocDir: string, basePath: string): EpubTocE
     return out;
 }
 
+/** Opacity and placement for the on-screen reading view: readable, and seen without scrolling. */
+const SCREEN_WATERMARK_OPACITY = 0.6;
+/** Opacity for the downloaded copy: present, but not intrusive to read. */
+const DOWNLOAD_WATERMARK_OPACITY = 0.35;
+
 export function readEpubResource(
     zip: EpubArchive,
     manifest: EpubManifest,
@@ -184,7 +189,7 @@ export function readEpubResource(
     if (!entry) return null;
     let data = entry.getData();
     if (watermark && /xhtml|html/.test(item.mediaType)) {
-        data = injectStamp(data, watermark);
+        data = injectStamp(data, watermark, SCREEN_WATERMARK_OPACITY, true);
     }
     return { data, mediaType: item.mediaType };
 }
@@ -196,7 +201,7 @@ export function watermarkEpub(data: Buffer, watermark: Watermark): Buffer {
         if (entry.isDirectory) continue;
         let entryData = entry.getData();
         if (/\.x?html?$/i.test(entry.entryName)) {
-            entryData = injectStamp(entryData, watermark);
+            entryData = injectStamp(entryData, watermark, DOWNLOAD_WATERMARK_OPACITY);
         }
         entries.push({ name: entry.entryName, data: entryData });
     }
@@ -260,13 +265,14 @@ function stampPage(page: PDFPage, font: PDFFont, line: string): void {
     });
 }
 
-function injectStamp(data: Buffer, watermark: Watermark): Buffer {
-    const stamp = buildStamp(watermark);
-    const text = data.toString('utf8');
-    return Buffer.from(
-        text.includes('</body>') ? text.replace('</body>', `${stamp}</body>`) : text + stamp,
-        'utf8',
-    );
+function injectStamp(data: Buffer, watermark: Watermark, opacity = DOWNLOAD_WATERMARK_OPACITY, atStart = false): Buffer {
+    const stamp = buildStamp(watermark, opacity);
+    let text = data.toString('utf8');
+    text = text.includes('</body>') ? text.replace('</body>', `${stamp}</body>`) : text + stamp;
+    if (atStart) {
+        text = /<body[^>]*>/i.test(text) ? text.replace(/(<body[^>]*>)/i, `$1${stamp}`) : stamp + text;
+    }
+    return Buffer.from(text, 'utf8');
 }
 
 const TRANSLIT: Record<string, string> = {
@@ -289,8 +295,8 @@ export function toAscii(value: string): string {
         .trim();
 }
 
-export function buildStamp(watermark: Watermark): string {
-    return `<div style="opacity:0.35;font-size:10px;text-align:center;padding:8px 0">Придбано: ${escapeHtml(
+export function buildStamp(watermark: Watermark, opacity = DOWNLOAD_WATERMARK_OPACITY): string {
+    return `<div style="opacity:${opacity};font-size:10px;text-align:center;padding:8px 0">Придбано: ${escapeHtml(
         watermark.name,
     )} · ${escapeHtml(watermark.email)}</div>`;
 }

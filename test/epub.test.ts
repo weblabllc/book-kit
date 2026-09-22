@@ -29,21 +29,28 @@ describe('epub toolkit', () => {
         expect(manifest.basePath).toBe('OEBPS/');
     });
 
-    it('serves chunked resources with screen watermark for xhtml only', () => {
+    it('serves chunked resources with a readable screen watermark at chapter start and end', () => {
         const zip = openEpub(buildEpub());
         const manifest = parseEpubManifest(zip);
         const wm = { name: 'Богдан', email: 'b@test.local' };
         const chapter = readEpubResource(zip, manifest, 'ch1.xhtml', wm)!;
-        expect(chapter.data.toString('utf8')).toContain('Придбано: Богдан · b@test.local');
+        const html = chapter.data.toString('utf8');
+        const occurrences = html.split('Придбано: Богдан · b@test.local').length - 1;
+        expect(occurrences).toBe(2);
+        expect(html).toContain('opacity:0.6');
+        expect(html.indexOf('Придбано:')).toBeLessThan(html.indexOf('<p>Привіт</p>'));
         const css = readEpubResource(zip, manifest, 'style.css', wm)!;
         expect(css.data.toString('utf8')).toBe('p{margin:0}');
         expect(readEpubResource(zip, manifest, '../secret', wm)).toBeNull();
     });
 
-    it('repacks a fully watermarked epub', () => {
+    it('repacks a fully watermarked epub with the unchanged download stamp (end only, lower opacity)', () => {
         const stamped = watermarkEpub(buildEpub(), { name: 'Ivan', email: 'i@test.local' });
         const out = new AdmZip(stamped);
-        expect(out.readAsText('OEBPS/ch1.xhtml')).toContain('Придбано: Ivan');
+        const html = out.readAsText('OEBPS/ch1.xhtml');
+        expect(html).toContain('Придбано: Ivan');
+        expect(html).toContain('opacity:0.35');
+        expect(html.split('Придбано:').length - 1).toBe(1);
         expect(out.readAsText('OEBPS/style.css')).toBe('p{margin:0}');
     });
 });
