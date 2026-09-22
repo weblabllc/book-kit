@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — 2026-09-22
+
+- Package renamed to `@weblabllc/ebook-kit`.
+- Real-file tests: an EPUB 3 built by pandoc (nested toc with Cyrillic anchors, repack keeps every entry, `mimetype` first and stored), a FictionBook Editor FB2 in windows-1251 (cover, poem, table, footnotes, epigraph) and a PDF produced by macOS Quartz.
+- `scripts/epubcheck.mjs` validates the watermarked EPUB and the FB2 conversion with W3C EPUBCheck; CI runs it on every push.
+
 ## 0.4.1
 - EPUB: attribute values in single quotes, `../` and `./` in toc/nav hrefs normalised against the spine, hex entities in titles, tolerant `decodeURIComponent`, case-insensitive `</body>` for the stamp
 - PDF: stamp positioned from the crop box, follows page rotation; e-mail transliterated too, diacritics folded (Zoë → Zoe)
